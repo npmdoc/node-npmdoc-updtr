@@ -1,0 +1,540 @@
+<html><head></head><body><div class="apidocDiv">
+<style>
+/*csslint
+*/
+.apidocDiv {
+    background: #fff;
+    font-family: Arial, Helvetica, sans-serif;
+}
+.apidocDiv a[href] {
+    color: #33f;
+    font-weight: bold;
+    text-decoration: none;
+}
+.apidocDiv a[href]:hover {
+    text-decoration: underline;
+}
+.apidocCodeCommentSpan {
+    background: #bbf;
+    color: #000;
+    display: block;
+}
+.apidocCodeKeywordSpan {
+    color: #d00;
+    font-weight: bold;
+}
+.apidocCodePre {
+    background: #eef;
+    border: 1px solid;
+    color: #777;
+    padding: 5px;
+    white-space: pre-wrap;
+}
+.apidocFooterDiv {
+    margin-top: 20px;
+    text-align: center;
+}
+.apidocModuleLi {
+    margin-top: 10px;
+}
+.apidocSectionDiv {
+    border-top: 1px solid;
+    margin-top: 20px;
+}
+.apidocSignatureSpan {
+    color: #777;
+    font-weight: bold;
+}
+</style>
+<h1>api documentation for
+    <a href="https://github.com/peerigon/updtr#readme">updtr (v1.0.0)</a>
+</h1>
+<h4>Update outdated npm modules with zero painâ„¢</h4>
+<div class="apidocSectionDiv"><a href="#apidoc.tableOfContents" id="apidoc.tableOfContents"><h1>table of contents</h1></a><ol>
+
+    <li class="apidocModuleLi"><a href="#apidoc.module.updtr">module updtr</a><ol>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.updtr.run">
+            function <span class="apidocSignatureSpan">updtr.</span>run
+            <span class="apidocSignatureSpan">(config, done)</span>
+            </a>
+
+        </li>
+
+        <li>
+
+            <span class="apidocSignatureSpan">object <span class="apidocSignatureSpan">updtr.</span>reporters</span>
+
+        </li>
+
+        <li>
+
+            <span class="apidocSignatureSpan">object <span class="apidocSignatureSpan">updtr.</span>util</span>
+
+        </li>
+
+    </ol></li>
+
+    <li class="apidocModuleLi"><a href="#apidoc.module.updtr.reporters">module updtr.reporters</a><ol>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.updtr.reporters.default">
+            function <span class="apidocSignatureSpan">updtr.reporters.</span>default
+            <span class="apidocSignatureSpan">(emitter)</span>
+            </a>
+
+        </li>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.updtr.reporters.shy">
+            function <span class="apidocSignatureSpan">updtr.reporters.</span>shy
+            <span class="apidocSignatureSpan">()</span>
+            </a>
+
+        </li>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.updtr.reporters.simple">
+            function <span class="apidocSignatureSpan">updtr.reporters.</span>simple
+            <span class="apidocSignatureSpan">(emitter)</span>
+            </a>
+
+        </li>
+
+    </ol></li>
+
+    <li class="apidocModuleLi"><a href="#apidoc.module.updtr.util">module updtr.util</a><ol>
+
+        <li>
+
+            <a class="apidocElementLiA" href="#apidoc.element.updtr.util.modulesMissingMessage">
+            function <span class="apidocSignatureSpan">updtr.util.</span>modulesMissingMessage
+            <span class="apidocSignatureSpan">(event)</span>
+            </a>
+
+        </li>
+
+    </ol></li>
+
+</ol></div>
+
+<div class="apidocSectionDiv">
+<h1><a href="#apidoc.module.updtr" id="apidoc.module.updtr">module updtr</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.updtr.run" id="apidoc.element.updtr.run">
+        function <span class="apidocSignatureSpan">updtr.</span>run
+        <span class="apidocSignatureSpan">(config, done)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function run(config, done) {
+    var emitter = new EventEmitter();
+    var testCmd;
+    var reporter;
+
+    function exec(cmd, cb) {
+        childProcess.exec(cmd, { maxBuffer: Infinity, encoding: "utf8", cwd: config.cwd }, cb);
+    }
+
+    function finish(err) {
+        emitter.removeAllListeners();
+        done(err || null);
+    }
+
+    if (typeof config.cwd !== "string") {
+        throw new Error("Cannot run updtr: cwd missing");
+    }
+
+    sanitizeConfig(config);
+
+    if (config.registry &amp;&amp; config.useYarn) {
+        throw new Error("`yarn add` does not support custom registries yet. Please use a .npmrc file to achieve this.");
+    }
+
+    reporter = config.reporter;
+    testCmd = config.testCmd;
+
+    reporter(emitter);
+
+    emitter.emit("init", {
+        cwd: config.cwd
+    });
+    exec(config.useYarn ? "yarn outdated --json --flat" : "npm outdated --json --long --depth=0", function (err, stdout) {
+        var missing;
+        var outdated;
+        var infos = [];
+        var tasks;
+
+        function createTask(info, index) {
+            return function (done) {
+                var event = {
+                    current: index + 1, // index is zero-based
+                    total: tasks.length,
+                    info: info,
+                    testCmd: testCmd,
+                    installCmd: (config.useYarn ? "yarn add" : "npm i") + (config.registry ? (" --registry " + config.registry) : "")
+                };
+                var testStdout;
+                var installCmd;
+
+                if (!config.useYarn &amp;&amp; config.saveExact) {
+                    event.installCmd += " --save-exact";
+                }
+
+                installCmd = event.installCmd + " " + info.name + "@" + info.updateTo + " " + info.saveCmd;
+
+                emitter.emit("updating", event);
+
+                async.series({
+                    deleteOldVersion: async.apply(exec, (config.useYarn ? "yarn remove " : "npm remove ") + info.name + " " + info
+.saveCmd),
+                    installNewVersion: async.apply(exec, installCmd),
+                    emitTestingEvent: function (done) {
+                        emitter.emit("testing", event);
+                        setImmediate(done);
+                    },
+                    runTests: function runTests(callback) {
+                        exec(testCmd, function (err, stdout, stderr) {
+                            if (err) {
+                                testStdout = stdout;
+                                callback(err);
+                                return;
+                            }
+                            callback(null, stdout, stderr);
+                        });
+                    }
+                }, function (err) {
+                    if (err) {
+                        emitter.emit("rollback", event);
+                        exec(event.installCmd + " " + info.name + "@" + info.current + " " + info.saveCmd + (config.saveExact ? " --
+save-exact" : ""), function (err) {
+                            if (err) {
+                                finish(err);
+                                return;
+                            }
+                            emitter.emit("rollbackDone", event);
+                            if (config.testStdout) {
+                                event.testStdout = testStdout;
+                                emitter.emit("testStdout", event);
+                            }
+                            done();
+                        });
+                        return;
+                    }
+                    emitter.emit("updatingDone", event);
+                    done();
+                });
+            };
+        }
+
+        if (err &amp;&amp; err.code &gt; 1) {
+            finish(err);
+            return;
+        }
+
+        if (!stdout) {
+            emitter.emit("noop");
+            finish();
+            return;
+        }
+
+        outdated = JSON.parse(stdout);
+        if (config.useYarn) {
+            if ("data" in outdated &amp;&amp; outdated.data.body instanceof Array) {
+                infos = outdated.data.body.map(function (info) {
+                    return { ...</pre></li>
+    <li>example usage<pre class="apidocCodePre">n/a</pre></li>
+    </ul>
+
+
+
+
+
+
+</div>
+
+<div class="apidocSectionDiv">
+<h1><a href="#apidoc.module.updtr.reporters" id="apidoc.module.updtr.reporters">module updtr.reporters</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.updtr.reporters.default" id="apidoc.element.updtr.reporters.default">
+        function <span class="apidocSignatureSpan">updtr.reporters.</span>default
+        <span class="apidocSignatureSpan">(emitter)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function defaultReporter(emitter) {
+    var currentLine = "";
+    var spinner;
+
+    function logProgress(message) {
+        if (spinner) {
+            spinner.stop();
+        }
+        currentLine = message;
+        spinner = new Spinner(message + "... ".grey + "%s ");
+        spinner.setSpinnerString(19);
+        spinner.start();
+    }
+
+    function finishProgress(message) {
+        if (spinner) {
+            spinner.stop(true);
+        }
+        if (message) {
+            console.log.apply(console, arguments);
+        } else {
+            console.log(currentLine);
+        }
+        currentLine = "";
+    }
+
+    function logUpdateProgress(event, status, message) {
+        var progress = event.current + "/" + event.total;
+        var circle = unicons.cli("circle");
+        var name = event.info.name;
+
+        if (status === "error") {
+            circle = circle.red;
+            name = name.red;
+        } else if (status === "success") {
+            circle = circle.green;
+        } else {
+            circle = circle.grey;
+        }
+
+        logProgress([
+            progress.grey,
+            "\t",
+            circle,
+            name,
+            message
+        ].join(" "));
+    }
+
+    // Activate colors by extending String.prototype
+    require("colors");
+
+    emitter.on("init", function () {
+        logProgress("Looking for outdated modules");
+    });
+    emitter.on("noop", function () {
+        finishProgress("No outdated modules found. Are they installed?");
+    });
+    emitter.on("modulesMissing", function (event) {
+        finishProgress(util.modulesMissingMessage(event));
+    });
+    emitter.on("outdated", function (event) {
+        finishProgress("Found %s outdated module%s", event.total, event.total === 1 ? "" : "s");
+        console.log("");
+        console.log("Starting to update your modules" + "...".grey);
+    });
+    emitter.on("updating", function (event) {
+        var info = event.info;
+
+        logUpdateProgress(event, "pending", "updating ".grey + info.current + " " + unicons.cli("arrowRight").grey + " " + info.
+updateTo);
+    });
+    emitter.on("testing", function (event) {
+        logUpdateProgress(event, "pending", "testing".grey);
+    });
+    emitter.on("rollback", function (event) {
+        logUpdateProgress(event, "error", "rolling back".grey);
+    });
+    emitter.on("rollbackDone", function (event) {
+        var info = event.info;
+
+        logUpdateProgress(event, "error", info.updateTo + " failed".grey);
+        finishProgress();
+    });
+    emitter.on("testStdout", function (event) {
+        console.log(event.testStdout);
+    });
+    emitter.on("updatingDone", function (event) {
+        var info = event.info;
+
+        logUpdateProgress(event, "success", info.updateTo + " success".grey);
+        finishProgress();
+    });
+    emitter.on("finished", function () {
+        console.log("");
+        console.log("Finished");
+    });
+}</pre></li>
+    <li>example usage<pre class="apidocCodePre">n/a</pre></li>
+    </ul>
+
+
+
+    <h2>
+        <a href="#apidoc.element.updtr.reporters.shy" id="apidoc.element.updtr.reporters.shy">
+        function <span class="apidocSignatureSpan">updtr.reporters.</span>shy
+        <span class="apidocSignatureSpan">()</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function shyReporter() {
+}</pre></li>
+    <li>example usage<pre class="apidocCodePre">n/a</pre></li>
+    </ul>
+
+
+
+    <h2>
+        <a href="#apidoc.element.updtr.reporters.simple" id="apidoc.element.updtr.reporters.simple">
+        function <span class="apidocSignatureSpan">updtr.reporters.</span>simple
+        <span class="apidocSignatureSpan">(emitter)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function defaultReporter(emitter) {
+    var currentLine = "";
+
+    function logProgress(message) {
+        currentLine = message;
+        console.log(message + "... ".grey);
+    }
+
+    function finishProgress(message) {
+        if (message) {
+            console.log.apply(console, arguments);
+        } else {
+            console.log(currentLine);
+        }
+        currentLine = "";
+    }
+
+    function logUpdateProgress(event, status, message) {
+        var progress = event.current + "/" + event.total;
+        var circle = unicons.cli("circle");
+        var name = event.info.name;
+
+        if (status === "error") {
+            circle = circle.red;
+            name = name.red;
+        } else if (status === "success") {
+            circle = circle.green;
+        } else {
+            circle = circle.grey;
+        }
+
+        logProgress([
+            progress.grey,
+            "\t",
+            circle,
+            name,
+            message
+        ].join(" "));
+    }
+
+    // Activate colors by extending String.prototype
+    require("colors");
+
+    emitter.on("init", function () {
+        logProgress("Looking for outdated modules");
+    });
+    emitter.on("noop", function () {
+        finishProgress("No outdated modules found. Are they installed?");
+    });
+    emitter.on("modulesMissing", function (event) {
+        finishProgress(util.modulesMissingMessage(event));
+    });
+    emitter.on("outdated", function (event) {
+        finishProgress("Found %s outdated module%s", event.total, event.total === 1 ? "" : "s");
+        console.log("");
+        console.log("Starting to update your modules" + "...".grey);
+    });
+    emitter.on("updating", function (event) {
+        var info = event.info;
+
+        logUpdateProgress(event, "pending", "updating ".grey + info.current + " " + unicons.cli("arrowRight").grey + " " + info.
+updateTo);
+    });
+    emitter.on("testing", function (event) {
+        logUpdateProgress(event, "pending", "testing".grey);
+    });
+    emitter.on("rollback", function (event) {
+        logUpdateProgress(event, "error", "rolling back".grey);
+    });
+    emitter.on("rollbackDone", function (event) {
+        var info = event.info;
+
+        logUpdateProgress(event, "error", info.updateTo + " failed".grey);
+        console.log("");
+    });
+    emitter.on("testStdout", function (event) {
+        console.log(event.testStdout);
+    });
+    emitter.on("updatingDone", function (event) {
+        var info = event.info;
+
+        logUpdateProgress(event, "success", info.updateTo + " success".grey);
+        console.log("");
+    });
+    emitter.on("finished", function () {
+        console.log("");
+        console.log("Finished");
+    });
+}</pre></li>
+    <li>example usage<pre class="apidocCodePre">n/a</pre></li>
+    </ul>
+
+
+</div>
+
+<div class="apidocSectionDiv">
+<h1><a href="#apidoc.module.updtr.util" id="apidoc.module.updtr.util">module updtr.util</a></h1>
+
+
+    <h2>
+        <a href="#apidoc.element.updtr.util.modulesMissingMessage" id="apidoc.element.updtr.util.modulesMissingMessage">
+        function <span class="apidocSignatureSpan">updtr.util.</span>modulesMissingMessage
+        <span class="apidocSignatureSpan">(event)</span>
+        </a>
+    </h2>
+    <ul>
+    <li>description and source-code<pre class="apidocCodePre">function modulesMissingMessage(event) {
+    var moduleList = event.infos.map(function (info) {
+        return info.name;
+    }).join(", ");
+
+    return "Some modules are not installed: " + moduleList +
+           ". Please install with 'npm install' first.";
+}</pre></li>
+    <li>example usage<pre class="apidocCodePre">...
+emitter.on("init", function () {
+    logProgress("Looking for outdated modules");
+});
+emitter.on("noop", function () {
+    finishProgress("No outdated modules found. Are they installed?");
+});
+emitter.on("modulesMissing", function (event) {
+    finishProgress(util.<span class="apidocCodeKeywordSpan">modulesMissingMessage</span>(event));
+});
+emitter.on("outdated", function (event) {
+    finishProgress("Found %s outdated module%s", event.total, event.total === 1 ? "" : "s");
+    console.log("");
+    console.log("Starting to update your modules" + "...".grey);
+});
+emitter.on("updating", function (event) {
+...</pre></li>
+    </ul>
+
+
+</div>
+
+<div class="apidocFooterDiv">
+    [ this document was created with
+    <a href="https://github.com/kaizhu256/node-utility2" target="_blank">utility2</a>
+    ]
+</div>
+</div>
+</body></html>
